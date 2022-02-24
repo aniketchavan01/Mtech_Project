@@ -1,0 +1,775 @@
+\chapter{Appendix A}
+ \subsection{Implementation of Gateway}
+ 
+ \begin{lstlisting}
+  
+import java.io.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.Random;
+
+public class Gateway {
+
+public static void main(String[] args){
+try{
+
+
+//socket for node1
+ServerSocket ss = new ServerSocket(6656);
+ServerSocket ss2 = new ServerSocket(6657);
+
+Socket s1=ss.accept();//establishes connection
+Socket s2= ss2.accept();
+
+//calculates start time
+double start = System.currentTimeMillis();
+
+//generating random value(Nonce) for Gid
+Random random = new Random();
+long gid = random.nextLong();
+
+System.out.println("Actual gid =>"+gid);
+
+// Call encryption method
+
+
+String sub = AES.encrypt(String.valueOf(gid));
+System.out.println("Encrypted Gid is: "+sub);
+
+
+//sending Gid to the nodes
+DataOutputStream din = new DataOutputStream(s1.getOutputStream());
+din.writeUTF(sub);
+System.out.println("Gid sent to node1");
+
+DataOutputStream din2 = new DataOutputStream(s2.getOutputStream());
+din2.writeUTF(sub);
+System.out.println("Gid sent to node2");
+
+//receiving from node1
+
+DataInputStream dout=new DataInputStream(s1.getInputStream());
+String  secret = dout.readUTF();
+System.out.println("secret s1 received from node1 = "+secret);
+
+//decrypting the secret recieved from node 1
+String decryptedSecret = AES.decrypt(secret);
+
+int decr_s1 = Integer.parseInt(decryptedSecret);
+System.out.println("Original Secret S1 => "+decr_s1);
+
+
+//receiving from node2
+DataInputStream dout2=new DataInputStream(s2.getInputStream());        String  secret2=dout2.readUTF();
+System.out.println("secret s2 received from node2 = "+secret2);
+
+//decrypting the secret recieved from node2
+String decryptedSecret2 = AES.decrypt(secret2);
+int decr_s2 = Integer.parseInt(decryptedSecret2);
+System.out.println("Original Secret S2 => "+decr_s2);
+
+//calculating MSK
+long msk = Integer.valueOf(decr_s2) * Integer.valueOf(decr_s1);
+System.out.println("MSK = "+msk);
+long calc_partSecret01 =  (msk/decr_s1);
+long calc_partSecret02 =  (msk/decr_s2);
+
+String partSecret01 = AES.encrypt(String.valueOf(calc_partSecret01));
+String partSecret02 = AES.encrypt(String.valueOf(calc_partSecret02));
+
+System.out.println("Encrypted Partial secret Sent to node 1"+"
+=>"+(partSecret01));
+
+System.out.println("Encrypted Partial secret Sent to node 2
+"+" => "+(partSecret02));
+
+//sending partial secrets
+//Partial secret for node 1
+DataOutputStream partSecret1 = new
+DataOutputStream(s1.getOutputStream());
+       
+partSecret1.writeUTF(partSecret01);
+
+// partial secret for node2
+DataOutputStream partSecret2  = new
+DataOutputStream(s2.getOutputStream());
+         
+partSecret2.writeUTF(partSecret02);
+
+
+
+
+                din.flush();
+                din2.flush();
+                dout.close();
+                dout2.close();
+                partSecret1.flush();
+                partSecret2.flush();
+                din.close();
+                din2.close();
+                partSecret1.close();
+                partSecret2.close();
+                ss.close(); //closing port of node1
+                ss2.close();
+
+
+                Runtime runtime = Runtime.getRuntime();
+                // Run the garbage collector
+                runtime.gc();
+
+// Calculate the used memory
+long memory = runtime.totalMemory() - runtime.freeMemory();
+System.out.println("Memory used => "+memory/1024+" KB");
+
+long end = System.currentTimeMillis();
+System.out.println("Total time =>  "+((end-start))+"ms");
+System.out.println("Total time =>  "+((end-start)/1000)+"sec");
+}
+catch(Exception e)
+{
+    System.out.println(e);
+}
+ }
+  }
+
+  \end{lstlisting}
+\newline
+\newpage
+\subsection{Implementation of Node1}
+\begin{lstlisting}
+
+import java.io.*;
+import java.net.*;
+import java.util.Random;
+public class Node1 {
+public static void main(String[] args) {
+try{
+//calculates start time
+double start = System.currentTimeMillis();
+
+
+
+//creating socket for communication with port
+Socket s=new Socket("localhost",6656);
+
+//generating secret s1
+Random random = new Random();
+long rdm = random.nextInt();
+String part_random = String.valueOf(rdm);
+String rdm_2 = part_random.substring(0,5);
+System.out.println("Secret S1 => "+rdm_2);
+String encryptedRandom = AES.encrypt(rdm_2);
+System.out.println("Sending Encrypted Secret S2"+"=>"+encryptedRandom);
+
+// Sending s1 to server
+DataOutputStream dout=new DataOutputStream(s.getOutputStream());
+dout.writeUTF(String.valueOf(encryptedRandom));
+
+
+//recieve gid
+DataInputStream dis=new DataInputStream(s.getInputStream());
+String  str=dis.readUTF();
+System.out.println("Encrypted GID received from server => "+str);
+
+String decryptedString = AES.decrypt(str);
+
+System.out.println("Decrypted Gid => "+decryptedString);
+
+//receive partial secret from gateway
+DataInputStream dis01 = new DataInputStream(s.getInputStream());
+String partSecret02 = dis01.readUTF();
+System.out.println("Encrypted partial secret "+partSecret02);
+String cal_secret = AES.decrypt(partSecret02);
+System.out.println("Partial secret received => "+cal_secret);
+
+//calculating msk
+long cnv_part_secret = Integer.parseInt(cal_secret);
+long cnv_secret = Integer.parseInt(rdm_2);
+long calc_msk = cnv_part_secret * cnv_secret;
+System.out.println("Master secret key => "+calc_msk);
+
+            dout.flush();
+            dout.close();
+            s.close();
+
+Runtime runtime = Runtime.getRuntime();
+// Run the garbage collector
+runtime.gc();
+
+// Calculate the used memory
+long memory = runtime.totalMemory() - runtime.freeMemory();
+System.out.println("Memory used => "+memory/1024+" KB");
+long end = System.currentTimeMillis();
+System.out.println("Total time =>  "+(end-start)+"ms");
+System.out.println("Total time =>  "+((end-start)/1000)+"sec");
+
+        }catch(Exception e){System.out.println(e);}
+    }
+}
+
+\end{lstlisting}
+\newpage
+\subsection{Implementation of Node2}
+\begin{lstlisting}
+
+import java.io.*;
+import java.net.*;
+import java.util.Random;
+public class Node2 {
+public static void main(String[] args) {
+try{
+
+
+//calculates start time
+double start = System.currentTimeMillis();
+
+//creating socket for communication with port
+Socket s=new Socket("localhost",6657);
+
+//generating secret s1
+Random random = new Random();
+long rdm = random.nextInt();
+String part_random = String.valueOf(rdm);
+String rdm_2 = part_random.substring(0,5);
+System.out.println("Secret S1 => "+rdm_2);
+String encryptedRandom = AES.encrypt(rdm_2);
+System.out.println("Sending Encrypted Secret S2"+"=>"+encryptedRandom);
+
+// Sending s1 to server
+DataOutputStream dout=new DataOutputStream(s.getOutputStream());
+dout.writeUTF(String.valueOf(encryptedRandom));
+
+
+//recieve gid
+DataInputStream dis=new DataInputStream(s.getInputStream());
+String  str=dis.readUTF();
+System.out.println("Encrypted GID received from server => "+str);
+
+String decryptedString = AES.decrypt(str);
+System.out.println("Decrypted Gid => "+decryptedString);
+
+//receive partial secret from gateway
+DataInputStream dis01 = new DataInputStream(s.getInputStream());
+String partSecret02 = dis01.readUTF();
+
+System.out.println("Encrypted partial secret "+partSecret02);
+String cal_secret = AES.decrypt(partSecret02);
+System.out.println("Partial secret received => "+cal_secret);
+
+//calculating msk
+long cnv_part_secret = Integer.parseInt(cal_secret);
+long cnv_secret = Integer.parseInt(rdm_2);
+long calc_msk = cnv_part_secret * cnv_secret;
+System.out.println("Master secret key => "+calc_msk);
+
+            dout.flush();
+            dout.close();
+            s.close();
+
+            Runtime runtime = Runtime.getRuntime();
+
+            // Run the garbage collector
+            runtime.gc();
+
+// Calculate the used memory
+long memory = runtime.totalMemory() - runtime.freeMemory();
+System.out.println("Memory used => "+memory/1024+" KB");
+
+long end = System.currentTimeMillis();
+System.out.println("Total time =>  "+(end-start)+"ms");
+System.out.println("Total time =>  "+((end-start)/1000)+"sec");
+
+        }catch(Exception e){System.out.println(e);}
+    }
+}
+
+\end{lstlisting}
+\newpage
+\section{Appendix B}
+\subsection{Sponsor Peer class}
+\begin{lstlisting}
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.Random;
+
+
+public class SponsorPeer {
+
+public static void main(String[] args){
+try {
+
+
+//socket for Node Peer
+ServerSocket ss = new ServerSocket(6656);
+Socket s1 = ss.accept();//establishes connection
+
+//calculates start time
+double start = System.currentTimeMillis();
+
+//Receiving From Node 1
+
+DataInputStream dout = new DataInputStream(s1.getInputStream());
+String Node_id = dout.readUTF();
+
+//Id received from node 1
+System.out.println("id received  = " + Node_id);
+
+//Hash received from node 1
+String Hash_of_node = dout.readUTF();
+System.out.println("Received Hash of node 1 : " + Hash_of_node); //HD1
+
+//Calculating Hash from received id
+String calculated_hash = Hash.getSHA(Integer.parseInt(Node_id));
+System.out.println("Calculated Hash of node 1 : " + calculated_hash);
+
+//Checking the calculated hash and received hash
+if (Hash_of_node.equals(calculated_hash)) {
+System.out.println("Successfully Verified");
+}
+else {
+System.out.println("Failed to Verify");
+}
+
+//Sending Token to Node1
+DataOutputStream din = new DataOutputStream(s1.getOutputStream());
+
+//generating time stamp
+String timestamp = TimeStamp.getTimestamp();
+System.out.println("Timestamp => " + timestamp); 
+int TsParam = TimeStamp.getTimeStampElement();
+int token = TsParam | Integer.parseInt(Node_id);
+System.out.println("Token : " + token);
+
+// prime numbers required for CRT calculation
+int m[] = {139, 149};
+
+
+//Sending calculated token
+din.writeUTF(String.valueOf(token));
+System.out.println("token sent to node 1");
+
+din.writeUTF(String.valueOf(m[0]));
+System.out.println("m1 sent to node 1 :" + m[0]);
+
+din.writeUTF(String.valueOf(m[1]));
+System.out.println("m2 sent to node 1 :" + m[1]);
+
+//receiving from node2
+String Qsn = dout.readUTF();
+String Hash1 = dout.readUTF();
+
+System.out.println("Received Qsn : " + Qsn);
+System.out.println("Received Hash digest: " + Hash1); //HD2
+
+int HD1 = Integer.parseInt(Hash1.substring(0, 5), 16);
+System.out.println("HD1 => " + HD1);
+//Calculating and comparing Hash message with Qsn
+String cal_Hash1 = Hash.getSHA(Integer.parseInt(Qsn));
+if (cal_Hash1.equals(Hash1)) {
+System.out.println("Successfully Verified");
+}
+else {
+System.out.println("Failed to Verify");
+}
+
+//generating public and private keys
+int e_1 = 65537, d_1 = 1144307393; //mod n = 1767906419
+
+int e_2 = 65537, d_2 = 2142167921; //mod n = 2906398367
+
+// Generating a1 value
+Random random = new Random();
+long a_1 = random.nextInt(m[0]);
+System.out.println("Value of a_1 = " + a_1);
+// calculate hash function for HD1
+String ts2 = TimeStamp.getTimestamp();
+System.out.println("Timestamp => " + ts2);
+int TsParam1 = TimeStamp.getTimeStampElement();
+int Hash_msg = (int) (a_1 | d_2 | token | TsParam1);
+
+System.out.println("Hash_msg =>" + Hash_msg);
+String hash_HD2 = Hash.getSHA(Hash_msg);
+System.out.println("Hash message HD2  : " + hash_HD2);
+int HD2 = Integer.parseInt(hash_HD2.substring(0, 5), 16);
+System.out.println("HD2 => " + HD2);
+//send parameters to node peer
+System.out.println("Sending a1, R, token ");
+din.writeUTF(String.valueOf(a_1)); System.out.println("a1 = "+a_1);
+din.writeUTF(String.valueOf(d_2));
+din.writeUTF(String.valueOf(TsParam1));
+System.out.println("Sending Hash");
+din.writeUTF(hash_HD2);
+
+//receiving params
+String E = dout.readUTF();
+String a_2 = dout.readUTF();
+String hash_HD3 = dout.readUTF();
+
+String TsParam2 = dout.readUTF();
+
+System.out.println("E: " + E);
+System.out.println("a_2: " + a_2);
+System.out.println("hash_HD3: " + hash_HD3);
+
+
+int hash_msg3 = (Integer.parseInt(a_2) | Integer.parseInt(E) | token |
+Integer.parseInt(TsParam2));
+
+int HD3 = Integer.parseInt(hash_HD3.substring(0, 5), 16);
+System.out.println("HD3 => " + HD3);
+    
+//checking hash
+String cal_HD3 = Hash.getSHA(hash_msg3);
+if (cal_HD3.equals(hash_HD3)) {
+System.out.println("Successfully Verified");
+} else {
+System.out.println("Failed to Verify");
+}
+
+//calculate shared secret
+//Gamma
+System.out.println("HD1 = "+HD1+"\n HD2 = "+HD2+"\n HD3 = "+HD3);
+int gamma_param = (HD1 | HD2 | HD3);
+System.out.println("Gamma => " + gamma_param);
+int gamma = Integer.parseInt(Hash.getSHA(gamma_param).substring(0, 5),16);
+System.out.println("Hash Gamma => " + gamma);
+//
+int M = m[0] * m[1];
+System.out.println("M = " + M);
+float[] Yi = new float[0];
+int[] Mi = new int[0];
+for (int i = 0; i < 2; i++) {
+Mi = new int[2];
+Mi[i] = M / m[i];
+System.out.println("M_" + (i + 1) + "=" + Mi[i]);
+Yi = new float[2];
+Yi[i] = (float) ((Math.pow(M, -1)) % Mi[i]);
+System.out.println("Yi" + (i + 1) + " = " + Yi[i]);
+
+
+}
+float x = ((a_1 * Yi[0] * Mi[0]) + (Integer.parseInt(a_2) 
+* Yi[1] * Mi[1]));
+
+System.out.println("X = " + Double.doubleToLongBits(x));
+
+//closing the sockets
+din.flush();
+dout.close();
+din.close();
+ss.close(); //closing port of node1
+
+
+Runtime runtime = Runtime.getRuntime();
+// Run the garbage collector
+runtime.gc();
+// Calculate the used memory
+ long memory = runtime.totalMemory() - runtime.freeMemory();
+ System.out.println("Memory used => " + memory / 1024 + " KB");
+
+ long end = System.currentTimeMillis();
+ System.out.println("Total time =>  " + ((end - start)) + "ms");
+ System.out.println("Total time =>  " + ((end - start) / 1000) + "sec");
+
+ }catch(Exception e)
+ {
+  System.out.println(e);
+        }
+    }
+}
+
+\end{lstlisting}
+\newpage
+\subsection{Node Peer Class}
+\begin{lstlisting}
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.net.Socket;
+import java.util.Random;
+
+
+public class NodePeer {
+
+
+    public static void main(String[] args) {
+try {
+    //calculates start time
+        double start = System.currentTimeMillis();
+
+        //creating socket for communication with port
+        Socket s = new Socket("localhost", 6656);
+
+            //generating ID
+Random random = new Random();
+int Node_id = random.nextInt(1252032659);
+System.out.println("Original ID : "+Node_id);
+String Hash_of_node = Hash.getSHA(Node_id);
+System.out.println("Hash of ID : "+Hash_of_node);
+
+// Sending s1 to sponsor
+DataOutputStream dout = new DataOutputStream(s.getOutputStream());
+System.out.println("Sending Hash of node id to sponsor");
+dout.writeUTF(String.valueOf(Node_id));
+dout.writeUTF(Hash_of_node);
+
+//received Token
+DataInputStream dis = new DataInputStream(s.getInputStream());
+String received_token = dis.readUTF();
+String received_m1 = dis.readUTF();
+String received_m2 = dis.readUTF();
+
+System.out.println("Token received from sponsor peer => "
++ received_token);
+System.out.println("m1 received from sponsor peer => " + received_m1);
+System.out.println("m2 received from sponsor peer => " + received_m2);
+
+int token = Integer.parseInt(received_token);
+int m1 = Integer.parseInt(received_m1);
+int m2 = Integer.parseInt(received_m2);
+int m[] = {m1,m2};
+
+//calculating Authority Digest message Qsn
+String timestamp = TimeStamp.getTimestamp();
+System.out.println(timestamp); //prints timestamp with date and time
+int TsParam = TimeStamp.getTimeStampElement();
+int Qsn = ((TsParam  | Node_id) | token);
+
+System.out.println("Authority Digest message Qsn => "+Qsn);
+int HD1 = (Qsn | token | Node_id | TsParam);
+String hashDigest = Hash.getSHA(HD1);
+System.out.println("Hash of Qsn =>"+hashDigest);
+
+
+//Sending Qsn and HD1 to Sponsor peer
+System.out.println("Sending Qsn and Hash Digest message.. ");
+dout.writeUTF(String.valueOf(Qsn));
+dout.writeUTF(hashDigest); //hd1
+
+//receive parameters
+String a_1 = dis.readUTF();
+String R = dis.readUTF();
+String TsParam1 = dis.readUTF();
+String HD2 = dis.readUTF();
+System.out.println("Received parameters: \n a1 =>  "+ a_1+"\n Value of R => "+R+"\n Hash Digest => "+HD1);
+
+
+// check the correctness HD1
+int HashDigest1 = (Integer.parseInt(a_1 )| Integer.parseInt(R) | token | Integer.parseInt(TsParam1));
+String cal_HD1 = Hash.getSHA(Integer.parseInt
+(String.valueOf(HashDigest1)));
+if (cal_HD1.equals(HD2))
+{
+System.out.println("Successfully Verified");
+}
+else
+{
+System.out.println("Failed to Verify");
+}
+
+//Generating public and private key pair
+int E = 65537, e=596590433;
+
+
+//generate a2
+long a_2 = random.nextInt(m1);
+System.out.println("Value of a_2 = "+a_2);
+
+//generate hash digest
+// calculate hash function for HD2
+String ts2 = TimeStamp.getTimestamp();
+System.out.println("Timestamp => "+ts2);
+int TsParam2 = TimeStamp.getTimeStampElement();
+int HD3 = (int) (a_2 | E | token | TsParam2);
+
+String hash_HD2 = Hash.getSHA(HD3);
+System.out.println("Hash message HD3 : "+hash_HD2);
+
+//sending hash
+System.out.println("Sending parameters E, a_2, HD2");
+
+dout.writeUTF(String.valueOf(E));
+dout.writeUTF(String.valueOf(a_2));
+dout.writeUTF(hash_HD2);
+dout.writeUTF(String.valueOf(TsParam2));
+
+
+//calculate shared secret
+System.out.println("HD1 = "+Integer.parseInt(hashDigest.substring(0,5)
+,16));
+System.out.println("HD2 = "+Integer.parseInt(HD2.substring(0,5)
+,16));
+System.out.println("HD3 = "+Integer.parseInt(hash_HD2.substring(0,5)
+,16));
+int gamma_param = (Integer.parseInt(hashDigest.substring(0,5),16) 
+| Integer.parseInt(HD2.substring(0,5),16) 
+| Integer.parseInt(hash_HD2.substring(0,5),16));
+
+System.out.println("Gamma => " + gamma_param);
+int gamma = Integer.parseInt(Hash.getSHA(gamma_param).substring(0, 5),
+16);
+System.out.println("Hash Gamma => " + gamma);
+//
+int M = m[0] * m[1];
+System.out.println("M = " + M);
+float[] Yi = new float[0];
+int[] Mi = new int[0];
+for (int i = 0; i < 2; i++) {
+ Mi = new int[2];
+Mi[i] = M / m[i];
+System.out.println("M_" + (i + 1) + "=" + Mi[i]);
+
+Yi = new float[2];
+Yi[i] = (float) ((Math.pow(M, -1)) % Mi[i]);
+System.out.println("Yi" + (i + 1) + " = " + Yi[i]);
+
+
+}
+float x;
+x = ((Integer.parseInt(a_1) * Yi[0] * Mi[0]) + (a_2 * Yi[1] * Mi[1]));
+System.out.println("X = " + Double.doubleToLongBits(x));
+//closing the sockets
+dout.flush();
+dout.close();
+s.close();
+
+Runtime runtime = Runtime.getRuntime();
+// Run the garbage collector
+runtime.gc();
+
+// Calculate the used memory
+long memory = runtime.totalMemory() - runtime.freeMemory();
+System.out.println("Memory used => " + memory / 1024 + " KB");
+long end = System.currentTimeMillis();
+System.out.println("Total time =>  " + (end - start) + "ms");
+System.out.println("Total time =>  " + ((end - start) / 1000) + "sec");
+
+
+}
+catch (Exception e)
+{
+    System.out.println(e);
+}
+}
+}
+
+
+\end{lstlisting}
+\subsection{Timestamp Class}
+\begin{lstlisting}
+package com.company;
+
+import java.util.Calendar;
+import java.sql.Timestamp;
+import java.util.Date;
+public class TimeStamp
+{
+public static String getTimestamp()
+{
+Date date = new Date();
+Timestamp ts=new Timestamp(date.getTime());
+
+Calendar timestamp1 = Calendar.getInstance();
+int hour = timestamp1.get(Calendar.DATE);
+return String.valueOf(ts);
+
+}
+
+public static int getTimeStampElement()
+{
+
+Calendar timestamp1 = Calendar.getInstance();
+int hour = timestamp1.get(Calendar.HOUR);
+return hour;
+
+}
+
+}
+
+
+\end{lstlisting}
+\newpage
+\subsection{Hash Class}
+\begin{lstlisting}
+import javax.xml.bind.DatatypeConverter;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
+public class Hash {
+public static String getSHA(int input) throws NoSuchAlgorithmException
+{
+// Static getInstance method is called with hashing SHA
+MessageDigest md = MessageDigest.getInstance("SHA-256");
+
+// digest() method called
+// to calculate message digest of an input
+// and return array of byte
+String out = Integer.toString(input);
+return DatatypeConverter.printHexBinary
+(md.digest(out.getBytes(StandardCharsets.UTF_8)));
+}
+}
+
+\end{lstlisting}
+\newpage
+\section{Appendix C}
+\subsection{Scyther program}
+\begin{lstlisting}
+hashfunction hash;
+usertype Timestamp;
+usertype XorKey;
+const VoR:XorKey;
+
+macro Qnp = hash(VoR(Token,ID,Ts));
+macro HD1 = hash(VoR(Qnp,Token,ID,Ts));
+macro HD2 = hash(VoR(F,R,Token,Ts));
+macro HD3 = hash(VoR(Qnp,ID,Ts));
+
+
+protocol p2p(NP,SP)
+{
+	role NP
+	{
+		fresh Ts: Timestamp;
+		fresh ID,Token,E,e,a2: Nonce;
+		var F,R,a1: Nonce;	
+
+		send_1(NP,SP,ID,Token,HD1,Qnp);
+		recv_2(SP,NP,F,R,a1,HD2);
+
+		match(HD2,hash(F,R,Token,Ts));
+		send_3(NP,SP,E,a2,HD3);
+
+		claim(NP,Alive);
+		claim(NP,Weakagree);
+		claim(NP,Niagree);
+		claim(NP,Nisynch);
+		
+	}
+
+	role SP
+	{
+		fresh F,f,R,r,a1: Nonce;
+		var Ts: Timestamp;
+		var ID,Token,a2,E: Nonce;
+
+		recv_1(NP,SP,ID,Token,HD1,Qnp);
+		match(HD1,hash(Qnp,Token,ID,Ts));
+		send_2(SP,NP,F,R,a1,HD2);
+		recv_3(NP,SP,E,a2,HD3);
+		
+		
+		claim(SP,Alive);
+		claim(SP,Weakagree);
+		claim(SP,Niagree);
+		claim(SP,Nisynch);
+
+		
+
+	}
+
+
+}
+\end{lstlisting}
